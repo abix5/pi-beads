@@ -387,7 +387,12 @@ export default function piBeadsLean(pi: any) {
   // one-shot pickup of already-running tasks; must never break session_start
   async function loadWip(): Promise<void> {
     wip.clear();
-    const r = await bd(["list", "--status", "in_progress", "--json"], umbrella);
+    // no ensureFresh() here on purpose: syncing at startup just to paint a
+    // widget is not worth the delay (deliberate choice, see SPEC-ui.md)
+    const r = await bd(
+      ["list", "--status", "in_progress", "--json", "-n", "50"],
+      umbrella,
+    );
     if (!r.ok) return;
     const arr = jparse(r.out);
     if (!Array.isArray(arr)) return;
