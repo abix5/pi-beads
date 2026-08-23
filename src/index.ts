@@ -30,6 +30,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { widgetLines } from "./widget-lines.mjs";
 
 const pexec = promisify(execFile);
 
@@ -60,6 +61,10 @@ export default function piBeadsLean(pi: any) {
   const prefixToDir = new Map<string, string>(); // issue-id prefix -> owning repo dir (write routing)
   const basenameToDir = new Map<string, string>(); // repo folder name -> repo dir (create targeting)
   let defaultRepoDir: string | null = null; // repo that contains activeCwd (default create target)
+
+  // ---- in-session "in progress" widget state (memory only, no disk, no polling) ----
+  let uiRef: any = null; // ctx.ui captured at session_start; absent in subagents/workflows
+  const wip = new Map<string, { repo: string; title: string }>();
 
   let beadsReady = false; // umbrella .beads reachable
   let needPrime = true; // inject lean prime on next turn (reset at start + after compaction)
@@ -208,7 +213,7 @@ export default function piBeadsLean(pi: any) {
 
   function jparse(s: string): any {
     const t = (s ?? "").trim();
-    const i = t.search(/[\[{]/);
+    const i = t.search(/[[{]/);
     if (i < 0) return null;
     try {
       return JSON.parse(t.slice(i));
@@ -303,15 +308,51 @@ export default function piBeadsLean(pi: any) {
   }
 
   function setStatusLine(ctx: any) {
-    const text = beadsReady
-      ? isUmbrella
-        ? "beads: umbrella lean \u2713"
-        : "beads: CLI lean \u2713"
-      : "beads: not init (/beads-init)";
     try {
-      ctx?.ui?.setStatus?.("beads", text);
+      ctx?.ui?.setStatus?.("beads", beadsReady ? "bd\u2713" : "bd\u2717");
     } catch {
       /* ignore */
+    }
+  }
+
+  // ---- in-progress widget ----
+  function renderWip() {
+    try {
+      if (!uiRef?.setWidget) return;
+      if (wip.size === 0) {
+        uiRef.setWidget("beads-wip", undefined);
+        return;
+      }
+      const entries = Array.from(wip, ([id, v]) => ({ id, repo: v.repo, title: v.title }));
+      uiRef.setWidget(
+        "beads-wip",
+        () => ({ render: (width: number) => widgetLines(entries, width), invalidate: () => {} }),
+        { placement: "aboveEditor" },
+      );
+    } catch {
+      /* ui may be unavailable — never fatal */
+    }
+  }
+
+  async function titleOf(id: string, repoDir: string): Promise<string> {
+    const r = await bd(["show", id, "--json"], repoDir);
+    if (!r.ok) return "";
+    const o = jparse(r.out);
+    const obj = Array.isArray(o) ? o[0] : o;
+    return obj?.title ? String(obj.title) : "";
+  }
+
+  // one-shot pickup of already-running tasks; must never break session_start
+  async function loadWip(): Promise<void> {
+    wip.clear();
+    const r = await bd(["list", "--status", "in_progress", "--json"], umbrella);
+    if (!r.ok) return;
+    const arr = jparse(r.out);
+    if (!Array.isArray(arr)) return;
+    for (const i of arr) {
+      if (!i?.id) continue;
+      const dir = dirForPrefix(String(i.id));
+      wip.set(String(i.id), { repo: dir ? path.basename(dir) : "", title: String(i.title ?? "") });
     }
   }
 
@@ -322,8 +363,17 @@ export default function piBeadsLean(pi: any) {
   pi.on("session_start", async (_event: any, ctx: any) => {
     try {
       activeCwd = ctx?.cwd ?? process.cwd();
+      uiRef = ctx?.ui ?? null;
       await resolveTopology();
       setStatusLine(ctx);
+      if (beadsReady) {
+        try {
+          await loadWip();
+        } catch {
+          /* bd missing/broken -> widget just stays empty */
+        }
+        renderWip();
+      }
     } catch (e: any) {
       ctx?.ui?.notify?.(`pi-beads-lean init failed: ${e?.message ?? e}`, "error");
     }
@@ -558,6 +608,15 @@ export default function piBeadsLean(pi: any) {
       const r = await bd(args, repoDir);
       if (!r.ok) return textResult(`bd update failed: ${r.err}`);
       await afterWrite(repoDir);
+      if (params.status) {
+        const id = String(params.id);
+        if (String(params.status) === "in_progress") {
+          wip.set(id, { repo: path.basename(repoDir), title: String(params.title ?? "") || (await titleOf(id, repoDir)) });
+        } else {
+          wip.delete(id);
+        }
+        renderWip();
+      }
       return textResult(r.out.trim() || "updated");
     },
   });
@@ -593,6 +652,8 @@ export default function piBeadsLean(pi: any) {
         await afterWrite(dir);
         done.push(...rids);
       }
+      for (const id of done) wip.delete(id);
+      renderWip();
       return textResult(`closed ${done.join(", ")}`);
     },
   });
@@ -708,7 +769,9 @@ export default function piBeadsLean(pi: any) {
   pi.registerCommand("beads-init", {
     description: "Initialize beads (bd init) in the current project",
     async handler(_args: string, ctx: any) {
-      const r = await bd(["init"], activeCwd);
+      // --skip-agents/--skip-hooks: bd must not write AGENTS.md/CLAUDE.md/.claude/.codex
+      // /.agents or install git hooks (core.hooksPath) into the user's project.
+      const r = await bd(["init", "--skip-agents", "--skip-hooks"], activeCwd);
       await resolveTopology();
       setStatusLine(ctx);
       ctx?.ui?.notify?.(r.ok ? "beads initialized." : `bd init: ${r.err || r.out}`, r.ok ? "info" : "error");
@@ -718,11 +781,11 @@ export default function piBeadsLean(pi: any) {
   pi.registerCommand("beads-mode", {
     description: "Show current beads mode and context economics",
     async handler(_args: string, ctx: any) {
-      const mode = !beadsReady
-        ? "NOT INITIALIZED \u2014 run /beads-init"
-        : isUmbrella
+      const mode = beadsReady
+        ? isUmbrella
           ? "UMBRELLA LEAN \u2713 (reads span all repos; writes auto-route by id prefix)"
-          : "CLI LEAN \u2713 (single repo; prime ~141 tok once/segment; digests ~16-208 tok)";
+          : "CLI LEAN \u2713 (single repo; prime ~141 tok once/segment; digests ~16-208 tok)"
+        : "NOT INITIALIZED \u2014 run /beads-init";
       const lines = [
         `pi-beads-lean mode: ${mode}`,
         `umbrella: ${umbrella}${isUmbrella ? "" : " (no aggregate)"}`,
