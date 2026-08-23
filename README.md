@@ -189,9 +189,6 @@ beads dependencies live inside a single repository, so `beads_dep` across reposi
 impossible — that is how the storage works. For the same reason writing directly into the
 umbrella aggregate is not allowed: routing by id prefix is the only path.
 
-The widget's own labels are rendered in Russian by `src/widget-lines.mjs`; the pictures
-above show them.
-
 Finally, `bd`'s output format is not a stable contract. Verified against 1.0.5; on other
 versions the parsing may drift away from reality.
 
