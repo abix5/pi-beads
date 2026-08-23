@@ -38,12 +38,12 @@ own docs it adds ~10-50k tokens of tool schemas and only exists for shell-less c
 ## Commands (human, no LLM-context cost)
 
 - `/beads` — compact board (in-progress + ready)
-- `/beads-init` — `bd init` in the current project
+- `/beads-init` — `bd init --skip-agents --skip-hooks` in the current project: no `AGENTS.md`/`CLAUDE.md`/`.claude`/`.codex`/`.agents` and no git hooks are written, but `bd` still runs `git init` in a non-repository, appends five lines to the root `.gitignore` and commits the files it created.
 - `/beads-mode` — show current mode + context economics
 
 ## Status bar
 
-`beads: CLI lean ✓` · `beads: not init (/beads-init)`
+`bd✓` (beads ready) · `bd✗` (not initialized — run `/beads-init`)
 
 ## Install
 
