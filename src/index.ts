@@ -312,13 +312,13 @@ export default function piBeadsLean(pi: any) {
     const prime = await bd(["prime", "--mcp"], umbrella);
     if (!prime.ok) return null;
     let focus = "none";
-    const wip = await bd(
+    const inProgress = await bd(
       ["list", "--status", "in_progress", "--json"],
       umbrella,
     );
-    if (wip.ok) {
+    if (inProgress.ok) {
       try {
-        const a = JSON.parse(wip.out);
+        const a = JSON.parse(inProgress.out);
         if (Array.isArray(a) && a[0])
           focus = `${a[0].id} ${trunc(a[0].title ?? "")}`;
       } catch {
@@ -421,6 +421,10 @@ export default function piBeadsLean(pi: any) {
         void loadWip().then(renderWip, () => {
           /* bd missing/broken -> widget just stays empty */
         });
+      } else {
+        // /reload back into an uninitialized state: drop a stale widget
+        wip.clear();
+        renderWip();
       }
     } catch (e: any) {
       ctx?.ui?.notify?.(
@@ -961,13 +965,13 @@ export default function piBeadsLean(pi: any) {
       }
       await ensureFresh();
       const ready = await bd(["ready", "--json", "-n", "10"], umbrella);
-      const wip = await bd(
+      const inProgress = await bd(
         ["list", "--status", "in_progress", "--json"],
         umbrella,
       );
       const out = [
         "In progress:",
-        wip.ok ? fmtRows(wip.out) : "(error)",
+        inProgress.ok ? fmtRows(inProgress.out) : "(error)",
         "",
         "Ready:",
         ready.ok ? fmtRows(ready.out) : "(error)",
