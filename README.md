@@ -3,201 +3,209 @@
 [![npm](https://img.shields.io/npm/v/%40abix5%2Fpi-beads)](https://www.npmjs.com/package/@abix5/pi-beads)
 [![license: MIT](https://img.shields.io/npm/l/%40abix5%2Fpi-beads)](https://github.com/abix5/pi-beads/blob/main/LICENSE)
 
-Экономный по контексту мост между [pi](https://github.com/earendil-works/pi) и
-трекером задач [beads](https://github.com/steveyegge/beads) (`bd`). Агент получает
-компактные in-process инструменты `beads_*` вместо MCP-сервера, короткий prime
-один раз за сегмент вместо каждого хода, чтение сразу по всем репозиториям
-зонтичного воркспейса и запись, маршрутизируемую по префиксу id в
-репозиторий-владелец. В интерфейсе рядом с редактором живёт виджет задач в работе;
-ни одна его строка не стоит модели ни одного токена.
+A context-lean bridge between the [pi coding-agent](https://github.com/earendil-works/pi)
+and the [beads](https://github.com/steveyegge/beads) issue tracker (`bd`). The agent
+gets compact in-process `beads_*` tools instead of a beads MCP server, a short prime
+once per segment instead of once per turn, reads that span every repository of an
+umbrella workspace, and writes routed to the owning repository by issue-id prefix.
+Next to the editor sits a widget of the work in progress; not one of its lines costs
+the model a token.
 
 > [!TIP]
-> Нужен бинарник `bd` на `PATH` и каталог `.beads/` в проекте. Без `.beads/`
-> расширение остаётся тихим: в статус-строке `bd✗`, инструменты отвечают
-> отказом — его можно держать установленным глобально и не думать о нём в
-> проектах без beads.
+> You need the `bd` binary on `PATH` and a `.beads/` directory in the project.
+> Without `.beads/` the extension stays quiet — `bd✗` in the status line, tools
+> answer with a refusal — so it is safe to install globally and forget about it
+> in projects that do not use beads.
 
-## Зачем
+## Why
 
-Подружить агента с beads можно двумя привычными способами, и оба платят
-контекстом. Либо в каждый ход вливается полный `bd prime`, либо поднимается
-MCP-сервер beads, чья схема инструментов занимает место в контексте всё время,
-пока сессия жива. Этот пакет не делает ни того, ни другого.
+There are two usual ways to put an agent in front of beads, and both are paid for in
+context: either a full `bd prime` is poured into every turn, or a beads MCP server is
+started and its tool schemas occupy context for as long as the session lives. This
+package does neither.
 
-| Способ | Цена контекста |
+| Approach | Context cost |
 |---|---|
-| Полный `bd prime` каждый ход | ~1065 токенов × N ходов |
-| MCP-сервер beads | схемы инструментов висят в контексте всю сессию |
-| `@abix5/pi-beads` | `bd prime --mcp` ~141 токен один раз за сегмент плюс дайджесты ~16–208 токенов на чтение |
+| Full `bd prime` every turn | ~1065 tokens × N turns |
+| beads MCP server | tool schemas resident for the whole session |
+| `@abix5/pi-beads` | `bd prime --mcp` ~141 tokens once per segment, plus ~16–208 token digests per read |
 
-MCP-сервер beads не используется намеренно: по документации самого beads он
-существует ради клиентов без shell. В pi shell есть, поэтому прямой вызов `bd`
-и разбор его JSON в дайджест — самый лёгкий путь. Запись через `bd` тоже идёт
-напрямую: она и так дешёвая.
+The beads MCP server is skipped deliberately: by the beads documentation it exists for
+clients that have no shell. pi has a shell, so calling `bd` directly and folding its
+JSON into a digest is the lighter path. Writes go through `bd` directly too — they are
+cheap either way.
 
-Числа выше — оценки, зафиксированные в шапке `src/index.ts` при разработке, а не
-измерение на вашем проекте; порядок величин они передают верно.
+The numbers above are the estimates recorded in the header of `src/index.ts` during
+development, not a measurement on your project; the order of magnitude is right.
 
-## Как выглядит сессия
+## What a session looks like
 
-Виджет задач в работе. Ниже — вывод самого кода рендера, а не ручная рисовка:
-зонтичный воркспейс, ширина 80 колонок.
+An umbrella workspace, three issues in progress and one just closed, at 80 columns:
 
-```text
- ⦿ beads · в работе 3 · закрыто 2 · готовы 11
- ├─ ◐ P0 crmback-1a2  [crm-backend]  Оплата: идемпотентность вебхука         14м
- ├─ ◐ P1 crmfront-9c  [crm-frontend] Форма записи: валидация телефона         3ч
- ├─ ◐ P2 cicd-4f      [cicd]         Кэш сборки в раннере                     2д
- └─ ✓ P2 crmback-7b1  [crm-backend]  Миграция индексов                        5ч
-```
+![The in-progress widget in an umbrella workspace](https://raw.githubusercontent.com/abix5/pi-beads/main/docs/assets/widget.png)
 
-Одиночный репозиторий и узкий терминал — колонка репозитория исчезает сама:
+Every shot here is the real widget: the pictures are rendered by
+`scripts/widget-shots.mjs`, which imports `src/widget-lines.mjs` and calls
+`widgetLines(state, width - 1, theme)` with one leading space — exactly the way
+`src/index.ts` drives it — so nothing in this README is hand-drawn.
 
-```text
- ⦿ beads · в работе 1 · готовы 4
- └─ ◐ P1 beads-3f  Черновик README                            7м
-```
+Besides the widget there is a status-line segment: `bd✓` when beads is ready, `bd✗`
+when the project has no `.beads/`.
 
-Оба макета получены командой `node /tmp/widget-shot.mjs`, которая импортирует
-`src/widget-lines.mjs` и вызывает `widgetLines(state, width - 1)` с добавлением
-одного пробела слева — ровно так, как это делает расширение в `src/index.ts`,
-чтобы виджет не стоял вплотную к левому краю, когда все соседние отступают.
+## Widget legend
 
-Плюс к виджету — сегмент статус-строки: `bd✓`, когда beads готов, и `bd✗`,
-когда в проекте нет `.beads/`.
+![Every widget state and colour](https://raw.githubusercontent.com/abix5/pi-beads/main/docs/assets/widget-legend.png)
 
-## Легенда виджета
+1. `⦿ beads` — the header; it dims when nothing is in progress.
+2. The header counters: issues moved to `in_progress` in this session, issues closed in
+   this session, and how many are ready to work — open and unblocked. When the ready
+   number is unknown the segment disappears entirely: a `0` is never shown.
+3. `◐` is in progress, `✓` is closed. A closed row survives one agent turn and then
+   leaves; the header counter stays until the session ends.
+4. `P0`…`P4` — priority: `P0` red, `P1` yellow, the rest muted.
+5. `[crm-backend]` — the owning repository; in a single-repo project the column is gone.
+6. The right-hand column is how long the issue has been in progress, pinned to the
+   right edge.
+7. A closed issue's title is struck through.
 
-1. `⦿ beads` — шапка; она тускнеет, когда в работе ничего нет.
-2. `в работе N` — задачи, переведённые в `in_progress` в этой сессии.
-3. `закрыто N` — счётчик закрытых за сессию, живёт до её конца.
-4. `готовы N` — сколько задач готовы к работе, то есть открыты и не заблокированы.
-   Если число неизвестно, сегмент пропадает целиком: «0» не показывается никогда.
-5. `◐` — задача в работе, `✓` — закрытая; закрытая строка держится один ход
-   агента и уходит, а счётчик в шапке остаётся.
-6. `P0`…`P4` — приоритет: `P0` красным, `P1` жёлтым, остальные приглушённо.
-7. `[crm-backend]` — репозиторий-владелец; в одиночном репозитории колонки нет.
-8. `14м`, `3ч`, `2д` — сколько задача в работе; колонка прижата к правому краю.
-9. Строк не больше шести, остальные сворачиваются в `+N ещё`, и первыми
-   вытесняются закрытые.
+At most six rows are drawn; the rest collapse into a `+N` tail, and closed rows are
+evicted first. In a narrow pane the titles are cut with an ellipsis and the repository
+column disappears:
 
-## Umbrella-режим: много репозиториев, один список
+![The widget in a narrow pane](https://raw.githubusercontent.com/abix5/pi-beads/main/docs/assets/widget-narrow.png)
 
-Если рядом лежит зонтичный воркспейс — каталог, чей `bd` агрегирует несколько
-репозиториев, — расширение находит его само. Можно указать явно через
+## Umbrella mode: many repositories, one list
+
+If an umbrella workspace is nearby — a directory whose `bd` aggregates several
+repositories — the extension finds it on its own. It can also be named explicitly with
 `PI_BEADS_ROOT`.
 
-Чтение (`beads_ready`, `beads_list`, `beads_show`, `beads_deps` и prime) идёт по
-агрегату, поэтому агент видит задачи всех репозиториев сразу, а владелец задачи
-читается из префикса id: `crmback-1a2` принадлежит `crm-backend`.
+Reads (`beads_ready`, `beads_list`, `beads_show`, `beads_deps` and the prime) run
+against the aggregate, so the agent sees the issues of every repository at once, and an
+issue's owner is read off its id prefix: `crmback-1a2` belongs to `crm-backend`.
 
-Запись (`beads_create`, `beads_update`, `beads_close`, `beads_dep`,
-`beads_undep`, `beads_comment`) маршрутизируется в репозиторий-владелец по тому
-же префиксу, после чего JSONL репозитория переэкспортируется, а агрегат
-пересинхронизируется, чтобы следующее чтение было свежим. Писать прямо в агрегат
-нельзя: там одноразовые копии.
+Writes (`beads_create`, `beads_update`, `beads_close`, `beads_dep`, `beads_undep`,
+`beads_comment`) are routed to the owning repository by that same prefix; afterwards the
+repository's JSONL is re-exported and the aggregate re-synced, so the next read is
+fresh. Writing straight into the aggregate is not allowed: what lives there are
+throw-away copies.
 
-Если зонтика нет, расширение молча работает в обычном одно-репозиторном режиме.
-Текущий режим и таблицу маршрутов всегда покажет `/beads-mode`.
+With no umbrella around, the extension quietly works in ordinary single-repo mode. The
+current mode and the routing table are always one `/beads-mode` away.
 
-## Инструменты агента
+## How it works
 
-Все десять — прямые вызовы `bd` внутри процесса pi, без MCP-транспорта; наружу
-отдаётся дайджест, а не сырой JSON.
+**Prime.** Instead of a full `bd prime` on every turn, the extension injects a short
+`bd prime --mcp` block once per context segment, plus one line naming the id prefixes
+and the repositories they route to.
 
-| Инструмент | Что делает |
-|---|---|
-| `beads_ready` | Задачи, готовые к работе (открыты и не заблокированы), по всем репозиториям |
-| `beads_list` | Список с фильтром по статусу (`open,in_progress,blocked,deferred,closed`) |
-| `beads_show` | Существенные поля одной задачи: статус, приоритет, тип, описание, число зависимостей |
-| `beads_deps` | Блокеры или зависимые: дерево для одного id, компактные строки для нескольких |
-| `beads_create` | Создать задачу в нужном репозитории (`repo` — папка или префикс), вернуть id |
-| `beads_update` | Статус, приоритет, заголовок, заметки, метки; маршрут по префиксу id |
-| `beads_close` | Закрыть один или несколько id, с причиной |
-| `beads_dep` | Добавить зависимость (блокер блокирует задачу) внутри одного репозитория |
-| `beads_undep` | Снять зависимость |
-| `beads_comment` | Добавить комментарий-прогресс к задаче |
+**Reads.** Every read runs `bd` in-process and returns a digest — the fields an agent
+acts on — rather than raw JSON.
 
-## Команды
+**Writes.** Each write is dispatched to the owning repository by id prefix, then the
+aggregate is re-hydrated so the next read cannot show a stale list.
 
-Команды выполняет человек, и их вывод не попадает в контекст модели.
+**Widget.** Widget state lives in session memory: it shows what this session moved into
+progress and closed. Rendering happens in the UI process only, so it costs no tokens.
 
-| Команда | Что делает |
-|---|---|
-| `/beads` | Компактная доска: что в работе и что готово, по всем репозиториям |
-| `/beads-sync` | Пересобрать зонтичный агрегат из всех репозиториев прямо сейчас |
-| `/beads-init` | Тихая инициализация beads в текущем проекте (см. ниже) |
-| `/beads-mode` | Текущий режим, зонтик, репозиторий по умолчанию, таблица префиксов, экономика контекста |
-
-## Тихий init
-
-`/beads-init` выполняет `bd init --skip-agents --skip-hooks`. Эти два флага
-означают, что `bd` не станет писать `AGENTS.md`, `CLAUDE.md`, каталоги
-`.claude/`, `.codex/`, `.agents/` и не подменит `core.hooksPath` своими
-git-хуками. Ваши инструкции агентам остаются такими, какими вы их написали.
-
-> [!NOTE]
-> Чего эти флаги не отменяют: `bd init` в не-репозитории всё равно выполнит
-> `git init`, допишет свои строки в корневой `.gitignore` и закоммитит созданные
-> им файлы. Это поведение самого `bd`, расширение на него не влияет.
-
-## Установка
+## Install
 
 ```bash
 pi install npm:@abix5/pi-beads
 ```
 
-После установки — перезапуск pi или `/reload`. Скилл `beads` (как читать задачи
-между репозиториями, где создавать, как связывать) едет внутри пакета и
-регистрируется сам, раскладывать его руками не нужно.
+Then restart pi or `/reload`. The bundled `beads` skill — how to read across
+repositories, where to create, how to link — ships inside the package and registers
+itself; there is nothing to copy by hand.
 
-## Требования
+## Requirements
 
-- **pi** — расширение объявляет `@earendil-works/pi-coding-agent` в
-  `peerDependencies`, как предписывает документация пакетов pi.
-- **Node.js 22.6 или новее** — код на ESM с `node:`-префиксами, расширение
-  грузится как `.ts` через встроенное снятие типов.
-- **Бинарник `bd` на `PATH`** — расширение это обёртка, а не реализация beads.
-  Проверялось на `bd version 1.0.5 (Homebrew)`.
-- **Каталог `.beads/` в проекте** — создаётся через `/beads-init` или `bd init`.
+- **pi** — the extension declares `@earendil-works/pi-coding-agent` in
+  `peerDependencies`, as the pi packages documentation prescribes.
+- **Node.js 22.6 or newer** — the code is ESM with `node:` prefixes and the extension is
+  loaded as `.ts` through built-in type stripping.
+- **The `bd` binary on `PATH`** — this is a wrapper, not an implementation of beads.
+  Verified against `bd version 1.0.5 (Homebrew)`.
+- **A `.beads/` directory in the project** — created by `/beads-init` or `bd init`.
 
-## Настройка
+## Configuration
 
-| Переменная | По умолчанию | Смысл |
+| Variable | Default | Meaning |
 |---|---|---|
-| `PI_BEADS_ROOT` | автоопределение | Каталог зонтичного агрегата; понимает `~`. Не задана — зонтик ищется сам, не найден — обычный одно-репозиторный режим |
+| `PI_BEADS_ROOT` | auto-detected | Directory of the umbrella aggregate; understands `~`. Unset, the umbrella is searched for; not found, the extension runs in ordinary single-repo mode |
 
-Других настроек нет: остальное расширение выясняет само при старте сессии.
+There is nothing else to configure: the rest is worked out at session start.
 
-## Ограничения
+## Commands & tools
 
-Виджет живёт только в интерактивном интерфейсе pi. В подагентах и в
-workflow-запусках UI-контекста нет, поэтому виджет там не рисуется — инструменты
-`beads_*` при этом работают как обычно.
+Commands are run by a person and their output never reaches the model's context.
 
-Состояние виджета хранится в памяти сессии: он показывает то, что перевела в
-работу и закрыла именно эта сессия. Изменения, сделанные в другом окне или прямо
-через `bd`, появятся в нём только после следующего чтения. Закрытая строка
-держится один ход агента, а счётчик закрытых — до конца сессии. Строк не больше
-шести, остальные сворачиваются в `+N ещё`.
+| Command | What it does |
+|---|---|
+| `/beads` | A compact board: what is in progress and what is ready, across all repositories |
+| `/beads-sync` | Re-hydrate the umbrella aggregate from every repository right now |
+| `/beads-init` | Quiet initialization of beads in the current project (see below) |
+| `/beads-mode` | Current mode, umbrella, default repository, prefix table, context economics |
 
-Зависимости beads живут внутри одного репозитория, поэтому `beads_dep` между
-репозиториями невозможен — так устроено хранилище. По той же причине писать
-напрямую в зонтичный агрегат нельзя: только маршрутизация по префиксу id.
+The agent gets ten tools. All of them are direct in-process `bd` calls with no MCP
+transport, and what comes back is a digest rather than raw JSON.
 
-Наконец, формат вывода `bd` не является стабильным контрактом. Проверялось на
-1.0.5; на других версиях разбор может разойтись с реальностью.
+| Tool | What it does |
+|---|---|
+| `beads_ready` | Issues ready to work (open and unblocked) across all repositories |
+| `beads_list` | A list filtered by status (`open,in_progress,blocked,deferred,closed`) |
+| `beads_show` | The essential fields of one issue: status, priority, type, description, dependency counts |
+| `beads_deps` | Blockers or dependents: a tree for one id, compact lines for several |
+| `beads_create` | Create an issue in the right repository (`repo` is a folder name or a prefix), return its id |
+| `beads_update` | Status, priority, title, notes, labels; routed by id prefix |
+| `beads_close` | Close one or more ids, with a reason |
+| `beads_dep` | Add a dependency (blocker blocks issue) within one repository |
+| `beads_undep` | Remove a dependency |
+| `beads_comment` | Add a progress comment to an issue |
 
-## Не путать
+## Quiet init
 
-В npm есть более ранний пакет `pi-beads` другого автора, зависящий от старого
-namespace `@mariozechner/*`. Это не этот проект.
+`/beads-init` runs `bd init --skip-agents --skip-hooks`. Those two flags mean `bd` will
+not write `AGENTS.md`, `CLAUDE.md`, the `.claude/`, `.codex/` and `.agents/` directories,
+and will not point `core.hooksPath` at its own git hooks. Your instructions to agents stay
+as you wrote them.
 
-## Разработка
+> [!NOTE]
+> What the flags do not cancel: outside a repository `bd init` still runs `git init`, it
+> still appends its lines to the root `.gitignore`, and it commits the files it created.
+> That is `bd`'s own behaviour and the extension has no say in it.
+
+## Limitations
+
+The widget exists only in pi's interactive interface. Subagents and workflow runs have no
+UI context, so nothing is drawn there — the `beads_*` tools work as usual.
+
+Widget state is session memory. Changes made in another window, or straight through `bd`,
+appear only after the next read. A closed row survives one agent turn; the closed counter
+survives until the session ends. At most six rows are drawn, the rest collapse into a
+`+N` tail.
+
+beads dependencies live inside a single repository, so `beads_dep` across repositories is
+impossible — that is how the storage works. For the same reason writing directly into the
+umbrella aggregate is not allowed: routing by id prefix is the only path.
+
+The widget's own labels are rendered in Russian by `src/widget-lines.mjs`; the pictures
+above show them.
+
+Finally, `bd`'s output format is not a stable contract. Verified against 1.0.5; on other
+versions the parsing may drift away from reality.
+
+## Not to be confused with
+
+npm carries an older `pi-beads` package by a different author, depending on the retired
+`@mariozechner/*` namespace. That is not this project.
+
+## Development
 
 ```bash
-node --test src/widget-lines.test.mjs
+make test     # node --test src/widget-lines.test.mjs
+make shots    # re-render the README screenshots from the shipped code (needs vhs + imagemagick)
 ```
 
-Исходники в `src/`, шага сборки нет: после правки достаточно `/reload` в pi.
-Лицензия — [MIT](https://github.com/abix5/pi-beads/blob/main/LICENSE).
+Source lives in `src/` and there is no build step: after editing, `/reload` in pi.
+Licensed [MIT](https://github.com/abix5/pi-beads/blob/main/LICENSE).
