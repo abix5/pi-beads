@@ -396,8 +396,15 @@ export default function piBeadsLean(pi: any) {
       uiRef.setWidget(
         "beads-wip",
         (_tui: any, theme: any) => ({
+          // pi indents ARRAY widgets by one column itself (`new Text(line, 1, 0)`
+          // in interactive-mode.js) but hands a factory component the bare
+          // canvas. We take the theme from the factory, so we owe that column
+          // ourselves — otherwise this widget sits flush left while every other
+          // one is indented.
           render: (width: number) =>
-            widgetLines(widgetState(), width, uiRef?.theme ?? theme),
+            widgetLines(widgetState(), width - 1, uiRef?.theme ?? theme).map(
+              (l: string) => ` ${l}`,
+            ),
           invalidate: () => {},
         }),
         { placement: "aboveEditor" },
