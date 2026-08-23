@@ -65,16 +65,16 @@ export function truncToWidth(s, width) {
   return out + "\u2026";
 }
 
-/** `14м` / `3ч` / `2д`; unknown or unparsable start => empty column. */
+/** `14m` / `3h` / `2d`; unknown or unparsable start => empty column. */
 export function formatAge(startedAt, now = Date.now()) {
   const t = Date.parse(startedAt ?? "");
   if (!Number.isFinite(t)) return "";
   const min = Math.floor((now - t) / 60000);
   if (!Number.isFinite(min) || min < 0) return "";
-  if (min < 60) return `${min}\u043c`;
+  if (min < 60) return `${min}m`;
   const h = Math.floor(min / 60);
-  if (h < 24) return `${h}\u0447`;
-  return `${Math.floor(h / 24)}\u0434`;
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 }
 
 const PLAIN = { fg: (_c, t) => t, strikethrough: (t) => t };
@@ -132,13 +132,10 @@ export function widgetLines(state, width, theme) {
   const hidden = ordered.length - shown.length;
 
   // ---- header ----
-  const segs = [`\u0432 \u0440\u0430\u0431\u043e\u0442\u0435 ${active.length}`];
-  if (state?.closedCount > 0)
-    segs.push(
-      `\u0437\u0430\u043a\u0440\u044b\u0442\u043e ${state.closedCount}`,
-    );
+  const segs = [`${active.length} active`];
+  if (state?.closedCount > 0) segs.push(`${state.closedCount} done`);
   if (Number.isFinite(state?.readyCount))
-    segs.push(`\u0433\u043e\u0442\u043e\u0432\u044b ${state.readyCount}`);
+    segs.push(`${state.readyCount} ready`);
   const header = assemble(
     [
       { text: "\u29BF ", paint: (t) => fg("accent", t) },
@@ -200,6 +197,6 @@ export function widgetLines(state, width, theme) {
 
   const lines = [header.text, ...rows].filter((l) => l !== "");
   if (hidden > 0)
-    lines.push(fg("dim", truncToWidth(`+${hidden} \u0435\u0449\u0451`, width)));
+    lines.push(fg("dim", truncToWidth(`+${hidden} more`, width)));
   return lines;
 }

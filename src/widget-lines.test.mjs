@@ -33,26 +33,17 @@ const head = widgetLines(
   },
   120,
 )[0];
-assert.equal(
-  head,
-  "\u29BF beads \u00b7 \u0432 \u0440\u0430\u0431\u043e\u0442\u0435 2 \u00b7 \u0437\u0430\u043a\u0440\u044b\u0442\u043e 1 \u00b7 \u0433\u043e\u0442\u043e\u0432\u044b 12",
-  head,
-);
+assert.equal(head, "\u29BF beads \u00b7 2 active \u00b7 1 done \u00b7 12 ready", head);
 
-// ready unknown -> the segment is gone (never "готовы 0")
+// ready unknown -> the segment is gone (never "0 ready")
 const noReady = widgetLines(
   { entries: [P(1)], closedCount: 0, readyCount: null },
   120,
 )[0];
-assert.ok(!noReady.includes("\u0433\u043e\u0442\u043e\u0432\u044b"), noReady);
+assert.ok(!noReady.includes("ready"), noReady);
+assert.ok(!noReady.includes("done"), noReady);
 assert.ok(
-  !noReady.includes("\u0437\u0430\u043a\u0440\u044b\u0442\u043e"),
-  noReady,
-);
-assert.ok(
-  widgetLines({ entries: [P(1)], readyCount: 0 }, 120)[0].includes(
-    "\u0433\u043e\u0442\u043e\u0432\u044b 0",
-  ),
+  widgetLines({ entries: [P(1)], readyCount: 0 }, 120)[0].includes("0 ready"),
 );
 
 // ---------- tree branches, glyphs, priority and age columns ----------
@@ -62,22 +53,21 @@ const tree = widgetLines(
       {
         id: "crmback-1a2",
         repo: "crm-backend",
-        title:
-          "\u041f\u043e\u0447\u0438\u043d\u0438\u0442\u044c \u044d\u043a\u0441\u043f\u043e\u0440\u0442",
+        title: "Fix invoice PDF export",
         priority: 1,
-        age: "14\u043c",
+        age: "14m",
       },
       {
         id: "front-7x9",
         repo: "crm-front",
-        title: "\u0428\u0430\u043f\u043a\u0430",
+        title: "Header",
         priority: 2,
-        age: "3\u0447",
+        age: "3h",
       },
       {
         id: "chub-3k1",
         repo: "content-hub",
-        title: "\u0418\u043c\u043f\u043e\u0440\u0442",
+        title: "Import",
         priority: 0,
         closed: true,
       },
@@ -101,9 +91,9 @@ assert.ok(
   tree[3],
 );
 // age is right-aligned in its own column, closed row has none
-assert.ok(tree[1].endsWith("14\u043c"), tree[1]);
-assert.ok(tree[2].endsWith(" 3\u0447"), tree[2]);
-assert.ok(!/\d[\u043c\u0447\u0434]$/.test(tree[3]), tree[3]);
+assert.ok(tree[1].endsWith("14m"), tree[1]);
+assert.ok(tree[2].endsWith(" 3h"), tree[2]);
+assert.ok(!/\d[mhd]$/.test(tree[3]), tree[3]);
 for (const l of tree) assert.ok(displayWidth(l) <= 100, `too wide: ${l}`);
 
 // ---------- truncation by DISPLAY width ----------
@@ -116,7 +106,7 @@ for (const filler of ["\u6f22", "\u{1F600}"]) {
           repo: "r",
           title: filler.repeat(60),
           priority: 2,
-          age: "9\u0447",
+          age: "9h",
         },
       ],
     },
@@ -155,7 +145,7 @@ const many = {
 };
 const capped = widgetLines(many, 80);
 assert.equal(capped.length, 8); // header + 6 rows + tail
-assert.equal(capped[7], "+2 \u0435\u0449\u0451");
+assert.equal(capped[7], "+2 more");
 assert.ok(capped[6].includes("c-1")); // one closed survived, two evicted
 assert.ok(!capped.join("\n").includes("c-2"));
 // with a tail, no row uses the closing branch
@@ -166,9 +156,9 @@ for (const l of widgetLines(many, 6))
 
 // ---------- formatAge ----------
 const now = Date.parse("2026-08-23T12:00:00Z");
-assert.equal(formatAge("2026-08-23T11:46:00Z", now), "14\u043c");
-assert.equal(formatAge("2026-08-23T09:00:00Z", now), "3\u0447");
-assert.equal(formatAge("2026-08-21T12:00:00Z", now), "2\u0434");
+assert.equal(formatAge("2026-08-23T11:46:00Z", now), "14m");
+assert.equal(formatAge("2026-08-23T09:00:00Z", now), "3h");
+assert.equal(formatAge("2026-08-21T12:00:00Z", now), "2d");
 assert.equal(formatAge(undefined, now), "");
 assert.equal(formatAge("not a date", now), "");
 
@@ -186,14 +176,14 @@ const state = {
       repo: "crm-backend",
       title: "\u{1F600}\u6f22".repeat(30),
       priority: 1,
-      age: "14\u043c",
+      age: "14m",
     },
     {
       id: "front-7x9",
       repo: "crm-front",
       title: "b",
       priority: 2,
-      age: "3\u0447",
+      age: "3h",
     },
     {
       id: "chub-3k1",
