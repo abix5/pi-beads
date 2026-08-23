@@ -141,7 +141,7 @@ export function widgetLines(state, width, theme) {
     segs.push(`\u0433\u043e\u0442\u043e\u0432\u044b ${state.readyCount}`);
   const header = assemble(
     [
-      { text: "\u{1F4FF} ", paint: (t) => fg("accent", t) },
+      { text: "\u29BF ", paint: (t) => fg("accent", t) },
       {
         text: "beads",
         paint: (t) => fg(active.length ? "accent" : "dim", t),
