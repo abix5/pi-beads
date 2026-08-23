@@ -415,7 +415,10 @@ export default function piBeadsLean(pi: any) {
     readyCount = Array.isArray(arr) ? arr.length : null;
   }
 
-  async function metaOf(id: string, repoDir: string): Promise<Partial<WipEntry>> {
+  async function metaOf(
+    id: string,
+    repoDir: string,
+  ): Promise<Partial<WipEntry>> {
     const r = await bd(["show", id, "--json"], repoDir);
     if (!r.ok) return {};
     const o = jparse(r.out);
@@ -423,7 +426,9 @@ export default function piBeadsLean(pi: any) {
     if (!obj) return {};
     return {
       title: obj.title ? String(obj.title) : "",
-      priority: Number.isFinite(obj.priority) ? Number(obj.priority) : undefined,
+      priority: Number.isFinite(obj.priority)
+        ? Number(obj.priority)
+        : undefined,
       startedAt: obj.started_at ? String(obj.started_at) : undefined,
     };
   }
@@ -464,9 +469,12 @@ export default function piBeadsLean(pi: any) {
       setStatusLine(ctx);
       if (beadsReady) {
         // fire-and-forget: bd must not delay session start
-        void Promise.allSettled([loadWip(), refreshReady()]).then(renderWip, () => {
-          /* bd missing/broken -> widget just stays empty */
-        });
+        void Promise.allSettled([loadWip(), refreshReady()]).then(
+          renderWip,
+          () => {
+            /* bd missing/broken -> widget just stays empty */
+          },
+        );
       } else {
         // /reload back into an uninitialized state: drop a stale widget
         wip.clear();

@@ -134,7 +134,9 @@ export function widgetLines(state, width, theme) {
   // ---- header ----
   const segs = [`\u0432 \u0440\u0430\u0431\u043e\u0442\u0435 ${active.length}`];
   if (state?.closedCount > 0)
-    segs.push(`\u0437\u0430\u043a\u0440\u044b\u0442\u043e ${state.closedCount}`);
+    segs.push(
+      `\u0437\u0430\u043a\u0440\u044b\u0442\u043e ${state.closedCount}`,
+    );
   if (Number.isFinite(state?.readyCount))
     segs.push(`\u0433\u043e\u0442\u043e\u0432\u044b ${state.readyCount}`);
   const header = assemble(
@@ -144,7 +146,10 @@ export function widgetLines(state, width, theme) {
         text: "beads",
         paint: (t) => fg(active.length ? "accent" : "dim", t),
       },
-      { text: ` \u00b7 ${segs.join(" \u00b7 ")}`, paint: (t) => fg("muted", t) },
+      {
+        text: ` \u00b7 ${segs.join(" \u00b7 ")}`,
+        paint: (t) => fg("muted", t),
+      },
     ],
     width,
   );
@@ -172,15 +177,17 @@ export function widgetLines(state, width, theme) {
           paint: (t) => fg(e.closed ? "success" : "warning", t),
         },
         { text: prio, paint: (t) => fg(prioColor(e.priority), t) },
-        { text: `${pad(String(e.id ?? ""), idW)}  `, paint: (t) => fg("muted", t) },
+        {
+          text: `${pad(String(e.id ?? ""), idW)}  `,
+          paint: (t) => fg("muted", t),
+        },
         {
           text: repoW ? `${pad(repoCell(e), repoW)} ` : "",
           paint: (t) => fg("dim", t),
         },
         {
           text: String(e.title ?? ""),
-          paint: (t) =>
-            e.closed ? strike(fg("muted", t)) : fg("text", t),
+          paint: (t) => (e.closed ? strike(fg("muted", t)) : fg("text", t)),
         },
       ],
       bodyWidth,
@@ -193,8 +200,6 @@ export function widgetLines(state, width, theme) {
 
   const lines = [header.text, ...rows].filter((l) => l !== "");
   if (hidden > 0)
-    lines.push(
-      fg("dim", truncToWidth(`+${hidden} \u0435\u0449\u0451`, width)),
-    );
+    lines.push(fg("dim", truncToWidth(`+${hidden} \u0435\u0449\u0451`, width)));
   return lines;
 }
