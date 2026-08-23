@@ -417,12 +417,10 @@ export default function piBeadsLean(pi: any) {
       await resolveTopology();
       setStatusLine(ctx);
       if (beadsReady) {
-        try {
-          await loadWip();
-        } catch {
+        // fire-and-forget: bd must not delay session start
+        void loadWip().then(renderWip, () => {
           /* bd missing/broken -> widget just stays empty */
-        }
-        renderWip();
+        });
       }
     } catch (e: any) {
       ctx?.ui?.notify?.(
