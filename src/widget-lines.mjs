@@ -70,6 +70,8 @@ export function widgetLines(entries, width, max = 6) {
     return truncToWidth(s, width);
   });
   if (all.length > shown.length)
-    lines.push(truncToWidth(`+${all.length - shown.length} \u0435\u0449\u0451`, width));
+    lines.push(
+      truncToWidth(`+${all.length - shown.length} \u0435\u0449\u0451`, width),
+    );
   return lines.filter((l) => l !== "");
 }
