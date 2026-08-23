@@ -1,0 +1,14 @@
+{
+  "name": "pi-beads-lean",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Context-lean beads (bd) integration for pi: multi-repo umbrella awareness (cross-repo reads + prefix-routed writes), once-per-session lean prime, compact read/write tools, and a bundled `beads` skill auto-registered via resources_discover.",
+  "keywords": ["pi-package", "pi-extension", "beads", "bd", "task-tracking", "context-efficient", "multi-repo"],
+  "files": ["src", "skills", "README.md"],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
+}
