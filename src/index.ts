@@ -30,7 +30,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { widgetLines } from "./widget-lines.mjs";
+import { widgetLines, formatAge } from "./widget-lines.mjs";
 
 const pexec = promisify(execFile);
 
@@ -68,7 +68,17 @@ export default function piBeadsLean(pi: any) {
 
   // ---- in-session "in progress" widget state (memory only, no disk, no polling) ----
   let uiRef: any = null; // ctx.ui captured at session_start; absent in subagents/workflows
-  const wip = new Map<string, { repo: string; title: string }>();
+  type WipEntry = {
+    repo: string;
+    title: string;
+    priority?: number;
+    startedAt?: string;
+  };
+  const wip = new Map<string, WipEntry>();
+  // closed tasks live exactly one agent turn (cleared at the next agent_start)
+  const closedShown = new Map<string, WipEntry>();
+  let closedCount = 0; // whole session, header counter
+  let readyCount: number | null = null; // null => the segment is omitted, never "0"
 
   let beadsReady = false; // umbrella .beads reachable
   let needPrime = true; // inject lean prime on next turn (reset at start + after compaction)
@@ -351,22 +361,38 @@ export default function piBeadsLean(pi: any) {
   }
 
   // ---- in-progress widget ----
+  function widgetState() {
+    const row = (id: string, v: WipEntry, closed: boolean) => ({
+      id,
+      repo: v.repo,
+      title: v.title,
+      priority: v.priority,
+      age: closed ? "" : formatAge(v.startedAt),
+      closed,
+    });
+    return {
+      entries: [
+        ...Array.from(wip, ([id, v]) => row(id, v, false)),
+        ...Array.from(closedShown, ([id, v]) => row(id, v, true)),
+      ],
+      closedCount,
+      readyCount,
+    };
+  }
+
   function renderWip() {
     try {
       if (!uiRef?.setWidget) return;
-      if (wip.size === 0) {
+      if (wip.size === 0 && closedShown.size === 0) {
         uiRef.setWidget("beads-wip", undefined);
         return;
       }
-      const entries = Array.from(wip, ([id, v]) => ({
-        id,
-        repo: v.repo,
-        title: v.title,
-      }));
+      // state is read at RENDER time, so a later mutation repaints without re-registering
       uiRef.setWidget(
         "beads-wip",
-        () => ({
-          render: (width: number) => widgetLines(entries, width),
+        (_tui: any, theme: any) => ({
+          render: (width: number) =>
+            widgetLines(widgetState(), width, uiRef?.theme ?? theme),
           invalidate: () => {},
         }),
         { placement: "aboveEditor" },
@@ -376,12 +402,25 @@ export default function piBeadsLean(pi: any) {
     }
   }
 
-  async function titleOf(id: string, repoDir: string): Promise<string> {
+  // `bd ready` is a separate subprocess: only at session start and after writes,
+  // never on a timer. Failure => unknown, and the header segment disappears.
+  async function refreshReady(): Promise<void> {
+    const r = await bd(["ready", "--json"], umbrella);
+    const arr = r.ok ? jparse(r.out) : null;
+    readyCount = Array.isArray(arr) ? arr.length : null;
+  }
+
+  async function metaOf(id: string, repoDir: string): Promise<Partial<WipEntry>> {
     const r = await bd(["show", id, "--json"], repoDir);
-    if (!r.ok) return "";
+    if (!r.ok) return {};
     const o = jparse(r.out);
     const obj = Array.isArray(o) ? o[0] : o;
-    return obj?.title ? String(obj.title) : "";
+    if (!obj) return {};
+    return {
+      title: obj.title ? String(obj.title) : "",
+      priority: Number.isFinite(obj.priority) ? Number(obj.priority) : undefined,
+      startedAt: obj.started_at ? String(obj.started_at) : undefined,
+    };
   }
 
   // one-shot pickup of already-running tasks; must never break session_start
@@ -402,6 +441,8 @@ export default function piBeadsLean(pi: any) {
       wip.set(String(i.id), {
         repo: dir ? path.basename(dir) : "",
         title: String(i.title ?? ""),
+        priority: Number.isFinite(i.priority) ? Number(i.priority) : undefined,
+        startedAt: i.started_at ? String(i.started_at) : undefined,
       });
     }
   }
@@ -418,12 +459,13 @@ export default function piBeadsLean(pi: any) {
       setStatusLine(ctx);
       if (beadsReady) {
         // fire-and-forget: bd must not delay session start
-        void loadWip().then(renderWip, () => {
+        void Promise.allSettled([loadWip(), refreshReady()]).then(renderWip, () => {
           /* bd missing/broken -> widget just stays empty */
         });
       } else {
         // /reload back into an uninitialized state: drop a stale widget
         wip.clear();
+        closedShown.clear();
         renderWip();
       }
     } catch (e: any) {
@@ -432,6 +474,13 @@ export default function piBeadsLean(pi: any) {
         "error",
       );
     }
+  });
+
+  // closed tasks are visible for exactly one agent turn
+  pi.on("agent_start", async () => {
+    if (closedShown.size === 0) return;
+    closedShown.clear();
+    renderWip();
   });
 
   // re-prime after compaction (matches beads' PreCompact refresh behavior)
@@ -782,13 +831,19 @@ export default function piBeadsLean(pi: any) {
       if (params.status) {
         const id = String(params.id);
         if (String(params.status) === "in_progress") {
+          const meta = await metaOf(id, repoDir);
           wip.set(id, {
             repo: path.basename(repoDir),
-            title: String(params.title ?? "") || (await titleOf(id, repoDir)),
+            title: String(params.title ?? "") || meta.title || "",
+            priority: Number.isFinite(params.priority)
+              ? Number(params.priority)
+              : meta.priority,
+            startedAt: meta.startedAt,
           });
         } else {
           wip.delete(id);
         }
+        await refreshReady();
         renderWip();
       }
       return textResult(r.out.trim() || "updated");
@@ -841,7 +896,17 @@ export default function piBeadsLean(pi: any) {
       }
       // drop what really got closed even on a partial failure, or the widget
       // keeps showing closed tasks for the rest of the session
-      for (const id of done) wip.delete(id);
+      for (const id of done) {
+        const was = wip.get(id);
+        wip.delete(id);
+        closedShown.set(id, {
+          repo: was?.repo ?? path.basename(dirForPrefix(id) ?? ""),
+          title: was?.title ?? "",
+          priority: was?.priority,
+        });
+        closedCount += 1;
+      }
+      if (done.length) await refreshReady();
       renderWip();
       if (failure) return textResult(failure);
       return textResult(`closed ${done.join(", ")}`);
