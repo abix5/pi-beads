@@ -37,7 +37,11 @@ const pexec = promisify(execFile);
 // Skill ships INSIDE this plugin (../skills relative to src/index.ts) and is
 // registered via the `resources_discover` event — so it travels with the package
 // and never depends on a file being hand-placed in the agent's skills folder.
-const SKILLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "skills");
+const SKILLS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "skills",
+);
 
 const TOOL = {
   ready: "beads_ready",
@@ -71,7 +75,11 @@ export default function piBeadsLean(pi: any) {
   let needSync = true; // umbrella aggregate may be stale -> resync before next read
 
   // ---- bd runner (execFile = no shell injection); cwd selects which DB bd resolves ----
-  async function bd(args: string[], cwd: string = umbrella, timeout = 15000): Promise<{ ok: boolean; out: string; err: string }> {
+  async function bd(
+    args: string[],
+    cwd: string = umbrella,
+    timeout = 15000,
+  ): Promise<{ ok: boolean; out: string; err: string }> {
     try {
       const { stdout } = await pexec("bd", args, {
         cwd: cwd || process.cwd(),
@@ -80,7 +88,11 @@ export default function piBeadsLean(pi: any) {
       });
       return { ok: true, out: stdout ?? "", err: "" };
     } catch (e: any) {
-      return { ok: false, out: e?.stdout ?? "", err: (e?.stderr || e?.message || "bd failed").toString().trim() };
+      return {
+        ok: false,
+        out: e?.stdout ?? "",
+        err: (e?.stderr || e?.message || "bd failed").toString().trim(),
+      };
     }
   }
 
@@ -134,7 +146,8 @@ export default function piBeadsLean(pi: any) {
 
     // 1) find the umbrella root
     let root = (process.env.PI_BEADS_ROOT || "").trim();
-    if (root) root = path.resolve(root.replace(/^~(?=$|\/)/, process.env.HOME || "~"));
+    if (root)
+      root = path.resolve(root.replace(/^~(?=$|\/)/, process.env.HOME || "~"));
     if (!root) {
       // walk up: a hydrated umbrella is a .beads whose config lists additional repos
       let d = activeCwd;
@@ -201,7 +214,11 @@ export default function piBeadsLean(pi: any) {
   function resolveRepoTarget(repoParam?: string): string | null {
     if (!repoParam) return null;
     const k = String(repoParam).trim();
-    return basenameToDir.get(k) ?? prefixToDir.get(k) ?? (basenameToDir.get(path.basename(k)) || null);
+    return (
+      basenameToDir.get(k) ??
+      prefixToDir.get(k) ??
+      (basenameToDir.get(path.basename(k)) || null)
+    );
   }
   function resolveCreateTarget(repoParam?: string): string | null {
     return resolveRepoTarget(repoParam) ?? defaultRepoDir;
@@ -209,7 +226,8 @@ export default function piBeadsLean(pi: any) {
   const knownRepos = () => Array.from(basenameToDir.keys()).join(", ");
 
   // ---- compact formatters ----
-  const trunc = (s: string, n = 70) => (s.length > n ? s.slice(0, n - 1) + "\u2026" : s);
+  const trunc = (s: string, n = 70) =>
+    s.length > n ? s.slice(0, n - 1) + "\u2026" : s;
 
   function jparse(s: string): any {
     const t = (s ?? "").trim();
@@ -233,13 +251,19 @@ export default function piBeadsLean(pi: any) {
     return arr
       .map((i) => {
         const dep = i.dependency_count ? ` dep:${i.dependency_count}` : "";
-        const labels = Array.isArray(i.labels) && i.labels.length ? ` labels:${i.labels.slice(0, 4).join(",")}` : "";
+        const labels =
+          Array.isArray(i.labels) && i.labels.length
+            ? ` labels:${i.labels.slice(0, 4).join(",")}`
+            : "";
         return `${i.id} P${i.priority} [${i.status}] ${trunc(i.title ?? "")}${dep}${labels}`;
       })
       .join("\n");
   }
 
-  function fmtShow(o: any, childInfo?: { done: number; total: number; openIds: string[] } | null): string {
+  function fmtShow(
+    o: any,
+    childInfo?: { done: number; total: number; openIds: string[] } | null,
+  ): string {
     if (Array.isArray(o)) o = o[0];
     if (!o) return "(not found)";
     const blockers: any[] = Array.isArray(o.dependencies) ? o.dependencies : [];
@@ -250,13 +274,17 @@ export default function piBeadsLean(pi: any) {
     ];
     if (o.description) lines.push(`desc: ${trunc(String(o.description), 240)}`);
     if (blockers.length) {
-      lines.push(`blocked_by: ${blockers.map((b) => `${b.id}${b.status === "closed" ? "\u2713" : `[${b.status}]`}`).join(", ")}`);
+      lines.push(
+        `blocked_by: ${blockers.map((b) => `${b.id}${b.status === "closed" ? "\u2713" : `[${b.status}]`}`).join(", ")}`,
+      );
     } else if (o.dependency_count) {
       lines.push(`blocked_by: ${o.dependency_count}`);
     }
     if (o.dependent_count) lines.push(`blocks: ${o.dependent_count}`);
     if (childInfo) {
-      const openPart = childInfo.openIds.length ? ` · open: ${childInfo.openIds.slice(0, 10).join(", ")}` : "";
+      const openPart = childInfo.openIds.length
+        ? ` · open: ${childInfo.openIds.slice(0, 10).join(", ")}`
+        : "";
       lines.push(`children: ${childInfo.done}/${childInfo.total}${openPart}`);
     }
     if (o.assignee) lines.push(`assignee: ${o.assignee}`);
@@ -273,7 +301,10 @@ export default function piBeadsLean(pi: any) {
       .trim();
   }
 
-  const textResult = (text: string) => ({ content: [{ type: "text", text: clean(text) }], details: {} });
+  const textResult = (text: string) => ({
+    content: [{ type: "text", text: clean(text) }],
+    details: {},
+  });
 
   // ---- lean prime block (injected once per segment) ----
   async function buildPrimeBlock(): Promise<string | null> {
@@ -281,11 +312,15 @@ export default function piBeadsLean(pi: any) {
     const prime = await bd(["prime", "--mcp"], umbrella);
     if (!prime.ok) return null;
     let focus = "none";
-    const wip = await bd(["list", "--status", "in_progress", "--json"], umbrella);
+    const wip = await bd(
+      ["list", "--status", "in_progress", "--json"],
+      umbrella,
+    );
     if (wip.ok) {
       try {
         const a = JSON.parse(wip.out);
-        if (Array.isArray(a) && a[0]) focus = `${a[0].id} ${trunc(a[0].title ?? "")}`;
+        if (Array.isArray(a) && a[0])
+          focus = `${a[0].id} ${trunc(a[0].title ?? "")}`;
       } catch {
         /* ignore */
       }
@@ -323,10 +358,17 @@ export default function piBeadsLean(pi: any) {
         uiRef.setWidget("beads-wip", undefined);
         return;
       }
-      const entries = Array.from(wip, ([id, v]) => ({ id, repo: v.repo, title: v.title }));
+      const entries = Array.from(wip, ([id, v]) => ({
+        id,
+        repo: v.repo,
+        title: v.title,
+      }));
       uiRef.setWidget(
         "beads-wip",
-        () => ({ render: (width: number) => widgetLines(entries, width), invalidate: () => {} }),
+        () => ({
+          render: (width: number) => widgetLines(entries, width),
+          invalidate: () => {},
+        }),
         { placement: "aboveEditor" },
       );
     } catch {
@@ -352,7 +394,10 @@ export default function piBeadsLean(pi: any) {
     for (const i of arr) {
       if (!i?.id) continue;
       const dir = dirForPrefix(String(i.id));
-      wip.set(String(i.id), { repo: dir ? path.basename(dir) : "", title: String(i.title ?? "") });
+      wip.set(String(i.id), {
+        repo: dir ? path.basename(dir) : "",
+        title: String(i.title ?? ""),
+      });
     }
   }
 
@@ -375,7 +420,10 @@ export default function piBeadsLean(pi: any) {
         renderWip();
       }
     } catch (e: any) {
-      ctx?.ui?.notify?.(`pi-beads-lean init failed: ${e?.message ?? e}`, "error");
+      ctx?.ui?.notify?.(
+        `pi-beads-lean init failed: ${e?.message ?? e}`,
+        "error",
+      );
     }
   });
 
@@ -398,19 +446,34 @@ export default function piBeadsLean(pi: any) {
   pi.registerTool({
     name: TOOL.ready,
     label: "Beads ready",
-    description: "List beads issues that are ready to work (open, unblocked) across ALL repos, newest-priority first. Compact output; id prefix shows the owning project.",
+    description:
+      "List beads issues that are ready to work (open, unblocked) across ALL repos, newest-priority first. Compact output; id prefix shows the owning project.",
     parameters: {
       type: "object",
       properties: {
         limit: { type: "number", description: "Max issues (default 15)" },
-        repo: { type: "string", description: "Optional repo filter (folder name or id prefix)" },
-        label: { type: "string", description: "Require ALL of these labels (comma-separated, bd --label semantics)" },
-        labelAny: { type: "string", description: "Require AT LEAST ONE of these labels (comma-separated, bd --label-any semantics)" },
+        repo: {
+          type: "string",
+          description: "Optional repo filter (folder name or id prefix)",
+        },
+        label: {
+          type: "string",
+          description:
+            "Require ALL of these labels (comma-separated, bd --label semantics)",
+        },
+        labelAny: {
+          type: "string",
+          description:
+            "Require AT LEAST ONE of these labels (comma-separated, bd --label-any semantics)",
+        },
       },
     },
     async execute(_id: string, params: any) {
       const scope = resolveRepoTarget(params?.repo) ?? umbrella;
-      if (params?.repo && !resolveRepoTarget(params.repo)) return textResult(`unknown repo '${params.repo}' (known: ${knownRepos()})`);
+      if (params?.repo && !resolveRepoTarget(params.repo))
+        return textResult(
+          `unknown repo '${params.repo}' (known: ${knownRepos()})`,
+        );
       await ensureFresh();
       const rargs = ["ready", "--json", "-n", String(params?.limit ?? 15)];
       if (params?.label) rargs.push("--label", String(params.label));
@@ -424,20 +487,38 @@ export default function piBeadsLean(pi: any) {
   pi.registerTool({
     name: TOOL.list,
     label: "Beads list",
-    description: "List beads issues across ALL repos, optionally filtered by status (open,in_progress,blocked,deferred,closed). Compact output; id prefix shows the owning project.",
+    description:
+      "List beads issues across ALL repos, optionally filtered by status (open,in_progress,blocked,deferred,closed). Compact output; id prefix shows the owning project.",
     parameters: {
       type: "object",
       properties: {
-        status: { type: "string", description: "Comma-separated status filter, e.g. 'open,in_progress'" },
+        status: {
+          type: "string",
+          description: "Comma-separated status filter, e.g. 'open,in_progress'",
+        },
         limit: { type: "number", description: "Max issues (default 30)" },
-        repo: { type: "string", description: "Optional repo filter (folder name or id prefix)" },
-        label: { type: "string", description: "Require ALL of these labels (comma-separated, bd --label semantics)" },
-        labelAny: { type: "string", description: "Require AT LEAST ONE of these labels (comma-separated, bd --label-any semantics)" },
+        repo: {
+          type: "string",
+          description: "Optional repo filter (folder name or id prefix)",
+        },
+        label: {
+          type: "string",
+          description:
+            "Require ALL of these labels (comma-separated, bd --label semantics)",
+        },
+        labelAny: {
+          type: "string",
+          description:
+            "Require AT LEAST ONE of these labels (comma-separated, bd --label-any semantics)",
+        },
       },
     },
     async execute(_id: string, params: any) {
       const scoped = params?.repo ? resolveRepoTarget(params.repo) : null;
-      if (params?.repo && !scoped) return textResult(`unknown repo '${params.repo}' (known: ${knownRepos()})`);
+      if (params?.repo && !scoped)
+        return textResult(
+          `unknown repo '${params.repo}' (known: ${knownRepos()})`,
+        );
       await ensureFresh();
       const args = ["list", "--json", "-n", String(params?.limit ?? 30)];
       if (params?.status) args.push("--status", String(params.status));
@@ -452,10 +533,13 @@ export default function piBeadsLean(pi: any) {
   pi.registerTool({
     name: TOOL.show,
     label: "Beads show",
-    description: "Show essential details of one beads issue (status, priority, type, description, dependency counts). Works for any repo by id.",
+    description:
+      "Show essential details of one beads issue (status, priority, type, description, dependency counts). Works for any repo by id.",
     parameters: {
       type: "object",
-      properties: { id: { type: "string", description: "Issue id, e.g. 'crmback-1a2'" } },
+      properties: {
+        id: { type: "string", description: "Issue id, e.g. 'crmback-1a2'" },
+      },
       required: ["id"],
     },
     async execute(_id: string, params: any) {
@@ -465,7 +549,8 @@ export default function piBeadsLean(pi: any) {
       if (!r.ok) return textResult(`bd show failed: ${r.err}`);
       const o = jparse(r.out);
       if (!o) return textResult(r.out.trim());
-      let childInfo: { done: number; total: number; openIds: string[] } | null = null;
+      let childInfo: { done: number; total: number; openIds: string[] } | null =
+        null;
       const obj = Array.isArray(o) ? o[0] : o;
       if (obj && obj.issue_type === "epic") {
         const c = await bd(["children", String(params.id), "--json"], umbrella);
@@ -474,7 +559,9 @@ export default function piBeadsLean(pi: any) {
           childInfo = {
             total: arr.length,
             done: arr.filter((x: any) => x.status === "closed").length,
-            openIds: arr.filter((x: any) => x.status !== "closed").map((x: any) => x.id),
+            openIds: arr
+              .filter((x: any) => x.status !== "closed")
+              .map((x: any) => x.id),
           };
         }
       }
@@ -490,36 +577,61 @@ export default function piBeadsLean(pi: any) {
     parameters: {
       type: "object",
       properties: {
-        ids: { type: "string", description: "One or more issue ids, space or comma separated" },
-        direction: { type: "string", description: "'blockers' (default, what must finish first) or 'dependents' (what this blocks)" },
+        ids: {
+          type: "string",
+          description: "One or more issue ids, space or comma separated",
+        },
+        direction: {
+          type: "string",
+          description:
+            "'blockers' (default, what must finish first) or 'dependents' (what this blocks)",
+        },
       },
       required: ["ids"],
     },
     async execute(_id: string, params: any) {
       if (!params?.ids) return textResult("ids is required");
-      const ids = String(params.ids).split(/[\s,]+/).filter(Boolean);
+      const ids = String(params.ids)
+        .split(/[\s,]+/)
+        .filter(Boolean);
       if (ids.length === 0) return textResult("no valid ids");
-      const up = /^(dependents|up|blocks)$/i.test(String(params?.direction ?? ""));
+      const up = /^(dependents|up|blocks)$/i.test(
+        String(params?.direction ?? ""),
+      );
       const dir = up ? "up" : "down";
       const label = up ? "blocks" : "blocked_by";
       await ensureFresh();
       if (ids.length === 1) {
-        const r = await bd(["dep", "tree", ids[0], "--direction", dir, "--json"], umbrella);
+        const r = await bd(
+          ["dep", "tree", ids[0], "--direction", dir, "--json"],
+          umbrella,
+        );
         if (!r.ok) return textResult(`bd dep tree failed: ${r.err}`);
         const arr = jparse(r.out);
-        if (!Array.isArray(arr) || arr.length <= 1) return textResult(`${ids[0]} ${label}: (none)`);
+        if (!Array.isArray(arr) || arr.length <= 1)
+          return textResult(`${ids[0]} ${label}: (none)`);
         const body = arr
-          .map((n: any) => `${"  ".repeat(Math.max(0, n.depth || 0))}${(n.depth || 0) > 0 ? "\u2514 " : ""}${n.id} [${n.status}] P${n.priority} ${trunc(n.title ?? "", 56)}`)
+          .map(
+            (n: any) =>
+              `${"  ".repeat(Math.max(0, n.depth || 0))}${(n.depth || 0) > 0 ? "\u2514 " : ""}${n.id} [${n.status}] P${n.priority} ${trunc(n.title ?? "", 56)}`,
+          )
           .join("\n");
-        const blocked = dir === "down" && arr.some((n: any) => (n.depth || 0) > 0 && n.status !== "closed");
+        const blocked =
+          dir === "down" &&
+          arr.some((n: any) => (n.depth || 0) > 0 && n.status !== "closed");
         return textResult((blocked ? "BLOCKED\n" : "") + body);
       }
       const lines: string[] = [];
       for (const id of ids) {
-        const r = await bd(["dep", "list", id, "--direction", dir, "--json"], umbrella);
+        const r = await bd(
+          ["dep", "list", id, "--direction", dir, "--json"],
+          umbrella,
+        );
         const arr = jparse(r.out);
         const items = Array.isArray(arr) ? arr : [];
-        lines.push(`${id} ${label}: ${items.length ? items.map((x: any) => `${x.id}[${x.status}]`).join(", ") : "(none)"}`);
+        lines.push(
+          `${id} ${label}: ${items.length ? items.map((x: any) => `${x.id}[${x.status}]`).join(", ") : "(none)"}`,
+        );
       }
       return textResult(lines.join("\n"));
     },
@@ -535,12 +647,29 @@ export default function piBeadsLean(pi: any) {
       type: "object",
       properties: {
         title: { type: "string", description: "Short issue title" },
-        repo: { type: "string", description: "Target repo (folder name or id prefix). Required when running from the umbrella root." },
-        type: { type: "string", description: "task|bug|feature|chore|epic|decision|spike|story (default task)" },
+        repo: {
+          type: "string",
+          description:
+            "Target repo (folder name or id prefix). Required when running from the umbrella root.",
+        },
+        type: {
+          type: "string",
+          description:
+            "task|bug|feature|chore|epic|decision|spike|story (default task)",
+        },
         priority: { type: "number", description: "0-4, 0=highest (default 2)" },
-        description: { type: "string", description: "Optional longer description" },
-        parent: { type: "string", description: "Optional parent/epic id in the SAME repo" },
-        labels: { type: "string", description: "Optional labels (comma-separated)" },
+        description: {
+          type: "string",
+          description: "Optional longer description",
+        },
+        parent: {
+          type: "string",
+          description: "Optional parent/epic id in the SAME repo",
+        },
+        labels: {
+          type: "string",
+          description: "Optional labels (comma-separated)",
+        },
         notes: { type: "string", description: "Optional notes" },
         design: { type: "string", description: "Optional design notes" },
       },
@@ -549,13 +678,21 @@ export default function piBeadsLean(pi: any) {
     async execute(_id: string, params: any) {
       if (!params?.title) return textResult("title is required");
       const repoDir = resolveCreateTarget(params?.repo);
-      if (!repoDir) return textResult(`specify repo (one of: ${knownRepos()}) — cannot create in the umbrella aggregate`);
+      if (!repoDir)
+        return textResult(
+          `specify repo (one of: ${knownRepos()}) — cannot create in the umbrella aggregate`,
+        );
       const args = ["create", String(params.title)];
       if (params.type) args.push("-t", String(params.type));
-      if (params.priority !== undefined && params.priority !== null) args.push("-p", String(params.priority));
+      if (params.priority !== undefined && params.priority !== null)
+        args.push("-p", String(params.priority));
       if (params.description) args.push("-d", String(params.description));
       if (params.parent) {
-        if (dirForPrefix(String(params.parent)) && dirForPrefix(String(params.parent)) !== repoDir) return textResult("parent must be in the same repo as the new issue");
+        if (
+          dirForPrefix(String(params.parent)) &&
+          dirForPrefix(String(params.parent)) !== repoDir
+        )
+          return textResult("parent must be in the same repo as the new issue");
         args.push("--parent", String(params.parent));
       }
       if (params.labels) args.push("-l", String(params.labels));
@@ -571,47 +708,77 @@ export default function piBeadsLean(pi: any) {
   pi.registerTool({
     name: TOOL.update,
     label: "Beads update",
-    description: "Update a beads issue: status (open|in_progress|blocked|deferred|closed), priority (0-4), and/or title. Auto-routed to the owning repo by id prefix.",
+    description:
+      "Update a beads issue: status (open|in_progress|blocked|deferred|closed), priority (0-4), and/or title. Auto-routed to the owning repo by id prefix.",
     parameters: {
       type: "object",
       properties: {
         id: { type: "string", description: "Issue id" },
-        status: { type: "string", description: "open|in_progress|blocked|deferred|closed" },
+        status: {
+          type: "string",
+          description: "open|in_progress|blocked|deferred|closed",
+        },
         priority: { type: "number", description: "0-4, 0=highest" },
         title: { type: "string", description: "New title" },
-        parent: { type: "string", description: "New parent issue ID (same repo). Empty string removes parent." },
+        parent: {
+          type: "string",
+          description:
+            "New parent issue ID (same repo). Empty string removes parent.",
+        },
         notes: { type: "string", description: "Replace notes with this text" },
-        appendNotes: { type: "string", description: "Append text to existing notes" },
-        addLabels: { type: "string", description: "Comma-separated labels to add" },
-        removeLabels: { type: "string", description: "Comma-separated labels to remove" },
+        appendNotes: {
+          type: "string",
+          description: "Append text to existing notes",
+        },
+        addLabels: {
+          type: "string",
+          description: "Comma-separated labels to add",
+        },
+        removeLabels: {
+          type: "string",
+          description: "Comma-separated labels to remove",
+        },
       },
       required: ["id"],
     },
     async execute(_id: string, params: any) {
       if (!params?.id) return textResult("id is required");
       const repoDir = dirForPrefix(String(params.id));
-      if (!repoDir) return textResult(`unknown repo for id '${params.id}' (known prefixes: ${Array.from(prefixToDir.keys()).join(", ")})`);
+      if (!repoDir)
+        return textResult(
+          `unknown repo for id '${params.id}' (known prefixes: ${Array.from(prefixToDir.keys()).join(", ")})`,
+        );
       const args = ["update", String(params.id)];
       if (params.status) args.push("--status", String(params.status));
-      if (params.priority !== undefined && params.priority !== null) args.push("-p", String(params.priority));
+      if (params.priority !== undefined && params.priority !== null)
+        args.push("-p", String(params.priority));
       if (params.title) args.push("--title", String(params.title));
       if (params.parent !== undefined) {
         const p = String(params.parent);
-        if (p && dirForPrefix(p) && dirForPrefix(p) !== repoDir) return textResult("parent must be in the same repo as the issue");
+        if (p && dirForPrefix(p) && dirForPrefix(p) !== repoDir)
+          return textResult("parent must be in the same repo as the issue");
         args.push("--parent", p);
       }
       if (params.notes) args.push("--notes", String(params.notes));
-      if (params.appendNotes) args.push("--append-notes", String(params.appendNotes));
+      if (params.appendNotes)
+        args.push("--append-notes", String(params.appendNotes));
       if (params.addLabels) args.push("--add-label", String(params.addLabels));
-      if (params.removeLabels) args.push("--remove-label", String(params.removeLabels));
-      if (args.length === 2) return textResult("nothing to update (pass status, priority, title, parent, notes, or label changes)");
+      if (params.removeLabels)
+        args.push("--remove-label", String(params.removeLabels));
+      if (args.length === 2)
+        return textResult(
+          "nothing to update (pass status, priority, title, parent, notes, or label changes)",
+        );
       const r = await bd(args, repoDir);
       if (!r.ok) return textResult(`bd update failed: ${r.err}`);
       await afterWrite(repoDir);
       if (params.status) {
         const id = String(params.id);
         if (String(params.status) === "in_progress") {
-          wip.set(id, { repo: path.basename(repoDir), title: String(params.title ?? "") || (await titleOf(id, repoDir)) });
+          wip.set(id, {
+            repo: path.basename(repoDir),
+            title: String(params.title ?? "") || (await titleOf(id, repoDir)),
+          });
         } else {
           wip.delete(id);
         }
@@ -624,23 +791,32 @@ export default function piBeadsLean(pi: any) {
   pi.registerTool({
     name: TOOL.close,
     label: "Beads close",
-    description: "Close one or more beads issues by id (any repos). Run this when work is done before reporting completion. Auto-routed to owning repos by id prefix.",
+    description:
+      "Close one or more beads issues by id (any repos). Run this when work is done before reporting completion. Auto-routed to owning repos by id prefix.",
     parameters: {
       type: "object",
       properties: {
-        ids: { type: "string", description: "One or more issue ids, space or comma separated" },
+        ids: {
+          type: "string",
+          description: "One or more issue ids, space or comma separated",
+        },
         reason: { type: "string", description: "Optional closing reason" },
       },
       required: ["ids"],
     },
     async execute(_id: string, params: any) {
       if (!params?.ids) return textResult("ids is required");
-      const ids = String(params.ids).split(/[\s,]+/).filter(Boolean);
+      const ids = String(params.ids)
+        .split(/[\s,]+/)
+        .filter(Boolean);
       if (ids.length === 0) return textResult("no valid ids");
       const byRepo = new Map<string, string[]>();
       for (const id of ids) {
         const dir = dirForPrefix(id);
-        if (!dir) return textResult(`unknown repo for id '${id}' (known prefixes: ${Array.from(prefixToDir.keys()).join(", ")})`);
+        if (!dir)
+          return textResult(
+            `unknown repo for id '${id}' (known prefixes: ${Array.from(prefixToDir.keys()).join(", ")})`,
+          );
         (byRepo.get(dir) ?? byRepo.set(dir, []).get(dir)!).push(id);
       }
       const done: string[] = [];
@@ -648,7 +824,8 @@ export default function piBeadsLean(pi: any) {
         const args = ["close", ...rids];
         if (params.reason) args.push("-r", String(params.reason));
         const r = await bd(args, dir);
-        if (!r.ok) return textResult(`bd close failed for ${rids.join(", ")}: ${r.err}`);
+        if (!r.ok)
+          return textResult(`bd close failed for ${rids.join(", ")}: ${r.err}`);
         await afterWrite(dir);
         done.push(...rids);
       }
@@ -661,22 +838,35 @@ export default function piBeadsLean(pi: any) {
   pi.registerTool({
     name: TOOL.dep,
     label: "Beads dependency",
-    description: "Add a dependency: 'blocker' blocks 'issue' (issue depends on blocker). Both must live in the same repo; routed by the issue's id prefix.",
+    description:
+      "Add a dependency: 'blocker' blocks 'issue' (issue depends on blocker). Both must live in the same repo; routed by the issue's id prefix.",
     parameters: {
       type: "object",
       properties: {
         issue: { type: "string", description: "The dependent issue id" },
-        blocker: { type: "string", description: "The issue that must be done first" },
+        blocker: {
+          type: "string",
+          description: "The issue that must be done first",
+        },
       },
       required: ["issue", "blocker"],
     },
     async execute(_id: string, params: any) {
-      if (!params?.issue || !params?.blocker) return textResult("issue and blocker are required");
+      if (!params?.issue || !params?.blocker)
+        return textResult("issue and blocker are required");
       const dir = dirForPrefix(String(params.issue));
       if (!dir) return textResult(`unknown repo for id '${params.issue}'`);
-      if (dirForPrefix(String(params.blocker)) && dirForPrefix(String(params.blocker)) !== dir)
-        return textResult("cross-repo dependencies are not supported by beads; both ids must be in the same repo");
-      const r = await bd(["link", String(params.issue), String(params.blocker)], dir);
+      if (
+        dirForPrefix(String(params.blocker)) &&
+        dirForPrefix(String(params.blocker)) !== dir
+      )
+        return textResult(
+          "cross-repo dependencies are not supported by beads; both ids must be in the same repo",
+        );
+      const r = await bd(
+        ["link", String(params.issue), String(params.blocker)],
+        dir,
+      );
       if (!r.ok) return textResult(`bd link failed: ${r.err}`);
       await afterWrite(dir);
       return textResult(r.out.trim() || "linked");
@@ -686,22 +876,35 @@ export default function piBeadsLean(pi: any) {
   pi.registerTool({
     name: TOOL.undep,
     label: "Beads unlink dependency",
-    description: "Remove a dependency: the issue will no longer depend on blocker. Both ids must be in the same repo; routed by the issue id prefix.",
+    description:
+      "Remove a dependency: the issue will no longer depend on blocker. Both ids must be in the same repo; routed by the issue id prefix.",
     parameters: {
       type: "object",
       properties: {
         issue: { type: "string", description: "The dependent issue id" },
-        blocker: { type: "string", description: "The blocker/dependency to remove" },
+        blocker: {
+          type: "string",
+          description: "The blocker/dependency to remove",
+        },
       },
       required: ["issue", "blocker"],
     },
     async execute(_id: string, params: any) {
-      if (!params?.issue || !params?.blocker) return textResult("issue and blocker are required");
+      if (!params?.issue || !params?.blocker)
+        return textResult("issue and blocker are required");
       const dir = dirForPrefix(String(params.issue));
       if (!dir) return textResult(`unknown repo for id '${params.issue}'`);
-      if (dirForPrefix(String(params.blocker)) && dirForPrefix(String(params.blocker)) !== dir)
-        return textResult("cross-repo dependencies are not supported by beads; both ids must be in the same repo");
-      const r = await bd(["dep", "remove", String(params.issue), String(params.blocker)], dir);
+      if (
+        dirForPrefix(String(params.blocker)) &&
+        dirForPrefix(String(params.blocker)) !== dir
+      )
+        return textResult(
+          "cross-repo dependencies are not supported by beads; both ids must be in the same repo",
+        );
+      const r = await bd(
+        ["dep", "remove", String(params.issue), String(params.blocker)],
+        dir,
+      );
       if (!r.ok) return textResult(`bd dep remove failed: ${r.err}`);
       await afterWrite(dir);
       return textResult(r.out.trim() || "dependency removed");
@@ -721,10 +924,14 @@ export default function piBeadsLean(pi: any) {
       required: ["id", "text"],
     },
     async execute(_id: string, params: any) {
-      if (!params?.id || !params?.text) return textResult("id and text are required");
+      if (!params?.id || !params?.text)
+        return textResult("id and text are required");
       const dir = dirForPrefix(String(params.id));
       if (!dir) return textResult(`unknown repo for id '${params.id}'`);
-      const r = await bd(["comment", String(params.id), String(params.text)], dir);
+      const r = await bd(
+        ["comment", String(params.id), String(params.text)],
+        dir,
+      );
       if (!r.ok) return textResult(`bd comment failed: ${r.err}`);
       await afterWrite(dir);
       return textResult(r.out.trim() || "comment added");
@@ -733,15 +940,22 @@ export default function piBeadsLean(pi: any) {
 
   // ============ slash commands (human, no LLM-context cost) ============
   pi.registerCommand("beads", {
-    description: "Show a compact beads board across all repos (ready + in-progress)",
+    description:
+      "Show a compact beads board across all repos (ready + in-progress)",
     async handler(_args: string, ctx: any) {
       if (!beadsReady) {
-        ctx?.ui?.notify?.("beads not initialized here. Run /beads-init.", "warning");
+        ctx?.ui?.notify?.(
+          "beads not initialized here. Run /beads-init.",
+          "warning",
+        );
         return;
       }
       await ensureFresh();
       const ready = await bd(["ready", "--json", "-n", "10"], umbrella);
-      const wip = await bd(["list", "--status", "in_progress", "--json"], umbrella);
+      const wip = await bd(
+        ["list", "--status", "in_progress", "--json"],
+        umbrella,
+      );
       const out = [
         "In progress:",
         wip.ok ? fmtRows(wip.out) : "(error)",
@@ -762,7 +976,10 @@ export default function piBeadsLean(pi: any) {
       }
       const r = await bd(["repo", "sync"], umbrella, 60000);
       needSync = false;
-      ctx?.ui?.notify?.(r.ok ? "umbrella re-synced." : `repo sync: ${r.err || r.out}`, r.ok ? "info" : "error");
+      ctx?.ui?.notify?.(
+        r.ok ? "umbrella re-synced." : `repo sync: ${r.err || r.out}`,
+        r.ok ? "info" : "error",
+      );
     },
   });
 
@@ -774,7 +991,10 @@ export default function piBeadsLean(pi: any) {
       const r = await bd(["init", "--skip-agents", "--skip-hooks"], activeCwd);
       await resolveTopology();
       setStatusLine(ctx);
-      ctx?.ui?.notify?.(r.ok ? "beads initialized." : `bd init: ${r.err || r.out}`, r.ok ? "info" : "error");
+      ctx?.ui?.notify?.(
+        r.ok ? "beads initialized." : `bd init: ${r.err || r.out}`,
+        r.ok ? "info" : "error",
+      );
     },
   });
 
@@ -792,7 +1012,11 @@ export default function piBeadsLean(pi: any) {
         `session cwd: ${activeCwd}`,
         `default create repo: ${defaultRepoDir ? path.basename(defaultRepoDir) : "(must pass repo)"}`,
         isUmbrella ? `repos: ${knownRepos()}` : "",
-        isUmbrella ? `prefix routes: ${Array.from(prefixToDir.entries()).map(([p, d]) => `${p}->${path.basename(d)}`).join(", ")}` : "",
+        isUmbrella
+          ? `prefix routes: ${Array.from(prefixToDir.entries())
+              .map(([p, d]) => `${p}->${path.basename(d)}`)
+              .join(", ")}`
+          : "",
         `Tools: ${Object.values(TOOL).join(", ")}`,
       ].filter(Boolean);
       ctx?.ui?.notify?.(lines.join("\n"), "info");
