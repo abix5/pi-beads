@@ -1,14 +1,51 @@
 {
-  "name": "pi-beads-lean",
+  "name": "@abix5/pi-beads",
   "version": "0.2.0",
-  "private": true,
-  "description": "Context-lean beads (bd) integration for pi: multi-repo umbrella awareness (cross-repo reads + prefix-routed writes), once-per-session lean prime, compact read/write tools, and a bundled `beads` skill auto-registered via resources_discover.",
-  "keywords": ["pi-package", "pi-extension", "beads", "bd", "task-tracking", "context-efficient", "multi-repo"],
-  "files": ["src", "skills", "README.md"],
+  "type": "module",
+  "description": "Context-lean beads (bd) task tracking for pi: compact beads_* tools, once-per-segment lean prime, umbrella multi-repo reads with prefix-routed writes, an in-progress widget, and a bundled beads skill.",
+  "license": "MIT",
+  "author": "Dmitriy Nenashev <6427182+abix5@users.noreply.github.com>",
+  "homepage": "https://github.com/abix5/pi-beads#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abix5/pi-beads.git"
+  },
+  "bugs": {
+    "url": "https://github.com/abix5/pi-beads/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "pi-coding-agent",
+    "beads",
+    "bd",
+    "task-tracking",
+    "issue-tracker",
+    "context-efficient",
+    "multi-repo"
+  ],
+  "files": [
+    "src/index.ts",
+    "src/widget-lines.mjs",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": ["./src/index.ts"],
+    "skills": ["./skills"]
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
   },
-  "pi": {
-    "extensions": ["./src/index.ts"]
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node --test src/widget-lines.test.mjs"
   }
 }
