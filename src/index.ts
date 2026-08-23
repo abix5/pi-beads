@@ -820,17 +820,23 @@ export default function piBeadsLean(pi: any) {
         (byRepo.get(dir) ?? byRepo.set(dir, []).get(dir)!).push(id);
       }
       const done: string[] = [];
+      let failure: string | null = null;
       for (const [dir, rids] of byRepo) {
         const args = ["close", ...rids];
         if (params.reason) args.push("-r", String(params.reason));
         const r = await bd(args, dir);
-        if (!r.ok)
-          return textResult(`bd close failed for ${rids.join(", ")}: ${r.err}`);
+        if (!r.ok) {
+          failure = `bd close failed for ${rids.join(", ")}: ${r.err}`;
+          break;
+        }
         await afterWrite(dir);
         done.push(...rids);
       }
+      // drop what really got closed even on a partial failure, or the widget
+      // keeps showing closed tasks for the rest of the session
       for (const id of done) wip.delete(id);
       renderWip();
+      if (failure) return textResult(failure);
       return textResult(`closed ${done.join(", ")}`);
     },
   });
