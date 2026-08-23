@@ -1,8 +1,17 @@
 /**
- * Pure rendering of the "in progress" widget lines.
+ * Pure rendering of the beads "in progress" widget.
  * Kept in plain JS (no TS) so it is directly runnable/testable by node.
  *
- * entries: [{ id, repo?, title? }, ...]  width: terminal columns
+ * state: {
+ *   entries: [{ id, repo?, title?, priority?, age?, closed? }, ...],
+ *   closedCount?: number,          // closed this SESSION (header counter)
+ *   readyCount?: number | null,    // null/undefined => segment omitted, never "0"
+ * }
+ * width: terminal columns
+ * theme: { fg(color, text), strikethrough(text) } — pi's theme; omitted => plain text
+ *
+ * HARD RULE: every width computation runs on the PLAIN twin; colour is applied
+ * only to fragments that have already been cut.
  */
 
 // ponytail: minimal display-width table (no wcwidth dep — the extension has none).
@@ -56,22 +65,136 @@ export function truncToWidth(s, width) {
   return out + "\u2026";
 }
 
-export function widgetLines(entries, width, max = 6) {
-  const all = Array.isArray(entries) ? entries : [];
-  if (all.length === 0) return [];
-  const shown = all.slice(0, max);
-  const idW = Math.max(...shown.map((e) => displayWidth(e.id)));
+/** `14м` / `3ч` / `2д`; unknown or unparsable start => empty column. */
+export function formatAge(startedAt, now = Date.now()) {
+  const t = Date.parse(startedAt ?? "");
+  if (!Number.isFinite(t)) return "";
+  const min = Math.floor((now - t) / 60000);
+  if (!Number.isFinite(min) || min < 0) return "";
+  if (min < 60) return `${min}\u043c`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}\u0447`;
+  return `${Math.floor(h / 24)}\u0434`;
+}
+
+const PLAIN = { fg: (_c, t) => t, strikethrough: (t) => t };
+
+function themeOf(theme) {
+  const fg =
+    theme && typeof theme.fg === "function"
+      ? (c, t) => theme.fg(c, t)
+      : PLAIN.fg;
+  const strike =
+    theme && typeof theme.strikethrough === "function"
+      ? (t) => theme.strikethrough(t)
+      : PLAIN.strikethrough;
+  return { fg, strike };
+}
+
+/**
+ * Lay fragments out left to right inside `width` columns. Measuring and cutting
+ * happen on `f.text` (plain); `f.paint` only ever sees an already-cut piece.
+ * Returns both twins so the caller can keep doing honest arithmetic.
+ */
+function assemble(frags, width) {
+  let used = 0;
+  let plain = "";
+  let out = "";
+  for (const f of frags) {
+    if (!f.text) continue;
+    if (used >= width) break;
+    const piece = truncToWidth(f.text, width - used);
+    if (!piece) break;
+    plain += piece;
+    out += f.paint ? f.paint(piece) : piece;
+    used += displayWidth(piece);
+  }
+  return { plain, text: out, width: used };
+}
+
+const MAX_ROWS = 6;
+
+function prioColor(p) {
+  if (p === 0) return "error";
+  if (p === 1) return "warning";
+  return "muted";
+}
+
+export function widgetLines(state, width, theme) {
+  const { fg, strike } = themeOf(theme);
+  const all = Array.isArray(state?.entries) ? state.entries : [];
+  if (all.length === 0 || !(width > 0)) return [];
+
+  // closed rows are the first thing pushed out by the row cap
+  const active = all.filter((e) => !e.closed);
+  const ordered = [...active, ...all.filter((e) => e.closed)];
+  const shown = ordered.slice(0, MAX_ROWS);
+  const hidden = ordered.length - shown.length;
+
+  // ---- header ----
+  const segs = [`\u0432 \u0440\u0430\u0431\u043e\u0442\u0435 ${active.length}`];
+  if (state?.closedCount > 0)
+    segs.push(`\u0437\u0430\u043a\u0440\u044b\u0442\u043e ${state.closedCount}`);
+  if (Number.isFinite(state?.readyCount))
+    segs.push(`\u0433\u043e\u0442\u043e\u0432\u044b ${state.readyCount}`);
+  const header = assemble(
+    [
+      { text: "\u{1F4FF} ", paint: (t) => fg("accent", t) },
+      {
+        text: "beads",
+        paint: (t) => fg(active.length ? "accent" : "dim", t),
+      },
+      { text: ` \u00b7 ${segs.join(" \u00b7 ")}`, paint: (t) => fg("muted", t) },
+    ],
+    width,
+  );
+
+  // ---- rows ----
+  const pad = (s, n) => s + " ".repeat(Math.max(0, n - displayWidth(s)));
+  const idW = Math.max(...shown.map((e) => displayWidth(e.id ?? "")));
   const repoCell = (e) => (e.repo ? `[${e.repo}]` : "");
   const repoW = Math.max(...shown.map((e) => displayWidth(repoCell(e))));
-  const pad = (s, n) => s + " ".repeat(Math.max(0, n - displayWidth(s)));
-  const lines = shown.map((e) => {
-    const s =
-      `\u25D0 ${pad(String(e.id), idW)}  ${pad(repoCell(e), repoW)} ${e.title ?? ""}`.trimEnd();
-    return truncToWidth(s, width);
-  });
-  if (all.length > shown.length)
-    lines.push(
-      truncToWidth(`+${all.length - shown.length} \u0435\u0449\u0451`, width),
+  const ageW = Math.max(0, ...shown.map((e) => displayWidth(e.age ?? "")));
+  const reserve = ageW > 0 && width - ageW - 1 > 10 ? ageW + 1 : 0;
+  const bodyWidth = width - reserve;
+
+  const rows = shown.map((e, i) => {
+    const last = i === shown.length - 1 && hidden === 0;
+    const prio = Number.isFinite(e.priority) ? `P${e.priority} ` : "";
+    const body = assemble(
+      [
+        {
+          text: last ? "\u2514\u2500 " : "\u251c\u2500 ",
+          paint: (t) => fg("dim", t),
+        },
+        {
+          text: e.closed ? "\u2713 " : "\u25d0 ",
+          paint: (t) => fg(e.closed ? "success" : "warning", t),
+        },
+        { text: prio, paint: (t) => fg(prioColor(e.priority), t) },
+        { text: `${pad(String(e.id ?? ""), idW)}  `, paint: (t) => fg("muted", t) },
+        {
+          text: repoW ? `${pad(repoCell(e), repoW)} ` : "",
+          paint: (t) => fg("dim", t),
+        },
+        {
+          text: String(e.title ?? ""),
+          paint: (t) =>
+            e.closed ? strike(fg("muted", t)) : fg("text", t),
+        },
+      ],
+      bodyWidth,
     );
-  return lines.filter((l) => l !== "");
+    const age = String(e.age ?? "");
+    if (!reserve || !age) return body.text.trimEnd() === "" ? "" : body.text;
+    const gap = bodyWidth - body.width + 1 + (ageW - displayWidth(age));
+    return body.text + " ".repeat(Math.max(1, gap)) + fg("dim", age);
+  });
+
+  const lines = [header.text, ...rows].filter((l) => l !== "");
+  if (hidden > 0)
+    lines.push(
+      fg("dim", truncToWidth(`+${hidden} \u0435\u0449\u0451`, width)),
+    );
+  return lines;
 }
