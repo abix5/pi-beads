@@ -212,6 +212,11 @@ export default function piBeadsLean(pi: any) {
   }
   // after a routed write: re-export the repo's JSONL so the next `repo sync` sees it
   async function afterWrite(repoDir: string): Promise<void> {
+    // any write can change what is ready; refresh off the critical path so the
+    // extra `bd ready` subprocess never shows up as tool latency (still no timers)
+    void refreshReady().then(renderWip, () => {
+      /* unknown stays unknown -> the header segment just disappears */
+    });
     if (!isUmbrella) return; // single-repo: same DB the reads use, nothing to sync
     await bd(["export", "-o", ".beads/issues.jsonl"], repoDir, 30000);
     needSync = true;
@@ -843,7 +848,6 @@ export default function piBeadsLean(pi: any) {
         } else {
           wip.delete(id);
         }
-        await refreshReady();
         renderWip();
       }
       return textResult(r.out.trim() || "updated");
@@ -906,7 +910,6 @@ export default function piBeadsLean(pi: any) {
         });
         closedCount += 1;
       }
-      if (done.length) await refreshReady();
       renderWip();
       if (failure) return textResult(failure);
       return textResult(`closed ${done.join(", ")}`);
