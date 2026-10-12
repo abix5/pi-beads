@@ -31,6 +31,7 @@ import { promisify } from "node:util";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { widgetLines, formatAge } from "./widget-lines.mjs";
+import { shouldUpdateWidget, widgetSnapshot } from "./widget-state.mjs";
 
 const pexec = promisify(execFile);
 
@@ -68,6 +69,7 @@ export default function piBeadsLean(pi: any) {
 
   // ---- in-session "in progress" widget state (memory only, no disk, no polling) ----
   let uiRef: any = null; // ctx.ui captured at session_start; absent in subagents/workflows
+  let lastWipSnapshot = "";
   type WipEntry = {
     repo: string;
     title: string;
@@ -388,8 +390,12 @@ export default function piBeadsLean(pi: any) {
   function renderWip() {
     try {
       if (!uiRef?.setWidget) return;
-      if (wip.size === 0 && closedShown.size === 0) {
+      const empty = wip.size === 0 && closedShown.size === 0;
+      const snapshot = widgetSnapshot(empty ? undefined : widgetState());
+      if (!shouldUpdateWidget(lastWipSnapshot, snapshot)) return;
+      if (empty) {
         uiRef.setWidget("beads-wip", undefined);
+        lastWipSnapshot = snapshot;
         return;
       }
       // state is read at RENDER time, so a later mutation repaints without re-registering
@@ -409,6 +415,8 @@ export default function piBeadsLean(pi: any) {
         }),
         { placement: "aboveEditor" },
       );
+      // recorded only once the UI took it, so a call that threw is retried
+      lastWipSnapshot = snapshot;
     } catch {
       /* ui may be unavailable — never fatal */
     }
@@ -472,6 +480,11 @@ export default function piBeadsLean(pi: any) {
     try {
       activeCwd = ctx?.cwd ?? process.cwd();
       uiRef = ctx?.ui ?? null;
+      lastWipSnapshot = "";
+      wip.clear();
+      closedShown.clear();
+      closedCount = 0;
+      readyCount = null;
       await resolveTopology();
       setStatusLine(ctx);
       if (beadsReady) {

@@ -51,7 +51,7 @@
     "access": "public"
   },
   "scripts": {
-    "test": "node --test src/widget-lines.test.mjs"
+    "test": "node --test src/widget-lines.test.mjs src/widget-state.test.mjs"
   },
   "main": "./src/index.ts",
   "exports": "./src/index.ts"
